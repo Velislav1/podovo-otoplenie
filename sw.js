@@ -1,7 +1,7 @@
 // Работа без интернет: програмата се пази в телефона/компютъра.
 // Страницата – първо от интернет (за да идват новите версии), иначе от паметта.
 // Библиотеките от CDN са с фиксирани версии – веднъж изтеглени, се ползват от паметта.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL = `shell-${VERSION}`, LIBS = 'libs-v1';
 const SHELL_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 const LIB_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'unpkg.com', 'tessdata.projectnaptha.com'];

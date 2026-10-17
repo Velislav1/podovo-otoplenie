@@ -292,6 +292,14 @@ table.data tfoot td{font-weight:800;border-top:2px solid var(--line)}
   .brand>span:last-child{display:none}
   main,.wrap{padding-left:12px;padding-right:12px}
 }
+.install-bar{position:fixed;left:10px;right:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:55;display:flex;gap:10px;align-items:center;
+  background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:10px 10px 10px 12px;box-shadow:0 18px 40px -12px rgba(0,0,0,.45)}
+.install-bar>div{flex:1;min-width:0}.install-bar b{display:block;font-size:15px}.install-bar small{color:var(--muted);font-size:12.5px}
+.ib-ic img{width:42px;height:42px;border-radius:11px;display:block}
+.ib-x{border:0;background:transparent;font-size:18px;color:var(--muted);padding:6px}
+@media(min-width:761px){.install-bar{left:auto;right:20px;bottom:20px;width:380px}}
+.qr-box{display:grid;place-items:center;margin:8px 0 12px}.qr-box svg{width:230px;height:230px;background:#fff;border-radius:14px;padding:6px}
+.how{margin:0;padding-left:20px}.how li{margin:6px 0}.how kbd{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 6px;background:var(--chip);font:inherit;font-weight:700}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(10px);background:#14171c;color:#fff;padding:11px 18px;border-radius:12px;z-index:80;opacity:0;transition:.2s;pointer-events:none;max-width:calc(100% - 32px);box-shadow:0 12px 30px -10px rgba(0,0,0,.5)}
 .toast.on{opacity:1;transform:translateX(-50%)}
 /* Report */
@@ -339,6 +347,7 @@ table.data tfoot td{font-weight:800;border-top:2px solid var(--line)}
       <button class="btn sm" data-act="importJSON" title="Отваря запазен обект (.json) или чертеж/снимка (JPG, HEIC, PDF, DXF…)">⬆ Отвори файл</button>
       <button class="btn sm primary" data-act="report">📄 Генерирай отчет</button>
       <button class="btn sm hidden" id="installBtn" data-act="install">📲 Инсталирай</button>
+      <button class="btn sm" id="phoneBtn" data-act="phoneQR" title="QR код – отворете програмата на телефона">📱 На телефона</button>
     </div>
   </div>
   <nav class="tabs">
@@ -382,6 +391,9 @@ table.data tfoot td{font-weight:800;border-top:2px solid var(--line)}
   <section class="tab" id="tab-settings"></section>
 </main>
 
+<div class="install-bar hidden" id="installBar"><span class="ib-ic"><img src="icon-192.png" alt=""></span>
+  <div><b>Добави иконка на телефона</b><small>и влизаш в програмата с едно докосване</small></div>
+  <button class="btn primary" data-act="install">Добави</button><button class="ib-x" data-act="installLater" aria-label="Не сега">✕</button></div>
 <div class="modal hidden" id="modal"><div class="modal-box" id="modalBox"></div></div>
 <div class="report hidden" id="report"></div>
 <div class="toast" id="toast"></div>
@@ -2210,7 +2222,10 @@ const ACTIONS={
   aiRecognize:()=>aiRecognize(),
   aiApply:()=>aiApply(),
   aiCancel:()=>{ aiReview=null; renderPlanTemp(); renderPlanInfo(); },
-  install:async()=>{ const e=window._installEvt; if(!e){ toast('Отворете менюто на браузъра → „Инсталиране“ / „Добави към началния екран“'); return; } e.prompt(); try{ await e.userChoice; }catch(err){} window._installEvt=null; $('installBtn').classList.add('hidden'); },
+  install:async()=>{ const e=window._installEvt; if(!e){ showInstallHelp(); return; } e.prompt(); let ok=false; try{ ok=(await e.userChoice).outcome==='accepted'; }catch(err){}
+    window._installEvt=null; $('installBtn').classList.add('hidden'); if(ok) $('installBar').classList.add('hidden'); },
+  installLater:()=>{ $('installBar').classList.add('hidden'); try{ localStorage.setItem('ufh_install_later',String(Date.now())); }catch(e){} },
+  phoneQR:()=>showPhoneQR(),
   aiMsgClose:()=>{ aiMsg=null; renderPlanInfo(); },
   aiKey:()=>openAiKeyDialog(()=>{ toast('✓ Ключът е запазен'); renderSettings(); }),
   aiKeyDel:()=>{ if(confirm('Да се изтрие ли API ключът от този браузър?')){ setAiKey(''); renderSettings(); } },
@@ -2392,10 +2407,39 @@ function renderAll(){ $('projName').value=P.name; renderTabs(); }
   if(hash==='report') openReport();
 })();
 
+// ---- Иконка на телефона: лента „Добави иконка“, упътване за iPhone/Android, QR код от компютъра ----
+const APP_URL='https://velislav1.github.io/podovo-otoplenie/';
+const UA=navigator.userAgent, IS_IOS=/iPhone|iPad|iPod/.test(UA)||(/Macintosh/.test(UA)&&navigator.maxTouchPoints>1), IS_ANDROID=/Android/.test(UA), IS_PHONE=IS_IOS||IS_ANDROID;
+const isInstalled=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+function maybeShowInstallBar(){ if(!IS_PHONE||isInstalled()) return; let later=0; try{ later=+localStorage.getItem('ufh_install_later')||0; }catch(e){}
+  if(Date.now()-later<3*864e5) return; $('installBar').classList.remove('hidden'); }
+function showInstallHelp(){
+  const iosOther=IS_IOS&&/CriOS|FxiOS|EdgiOS/.test(UA);
+  const steps=IS_IOS?(iosOther?`<li>На iPhone иконка се добавя от <b>Safari</b>. Копирайте адреса и го отворете в Safari:<br><b>${APP_URL}</b></li>`:'')+
+    `<li>Натиснете <b>Сподели</b> <kbd>⬆︎</kbd> (квадратчето със стрелка – долу в средата или горе вдясно).</li><li>Превъртете и изберете <b>„Добави към началния екран“</b> <kbd>⊞</kbd>.</li><li>Натиснете <b>„Добави“</b> горе вдясно.</li>`
+    :IS_ANDROID?`<li>Натиснете менюто <kbd>⋮</kbd> горе вдясно в Chrome.</li><li>Изберете <b>„Добавяне към началния екран“</b> или <b>„Инсталиране на приложението“</b>.</li><li>Потвърдете с <b>„Добавяне“</b> / <b>„Инсталиране“</b>.</li>`
+    :`<li>В Chrome или Edge натиснете иконата <kbd>⊕</kbd> вдясно в адресната лента или менюто <kbd>⋮</kbd> → <b>„Инсталиране“</b>.</li><li>За телефона: натиснете <b>„📱 На телефона“</b> и сканирайте QR кода.</li>`;
+  $('modalBox').innerHTML=`<div class="row-head"><h2>📲 Иконка на ${IS_PHONE?'телефона':'компютъра'}</h2><button class="btn sm" data-act="closeModal">✕</button></div>
+    <ol class="how">${steps}</ol><p class="hint">Готово – на началния екран се появява иконата <b>„Подово“</b>. Отваря се на цял екран и работи и без интернет.</p>
+    <div class="btn-group"><button class="btn primary" data-act="closeModal">Разбрах</button></div>`;
+  $('modal').classList.remove('hidden'); }
+async function showPhoneQR(){
+  const url=/^https?:$/.test(location.protocol)&&!/^(localhost|127\.)/.test(location.hostname)?location.origin+location.pathname:APP_URL;
+  $('modalBox').innerHTML=`<div class="row-head"><h2>📱 Отворете на телефона</h2><button class="btn sm" data-act="closeModal">✕</button></div>
+    <ol class="how"><li>Отворете <b>камерата</b> на телефона и я насочете към кода.</li><li>Докоснете връзката, която се появява.</li><li>В програмата натиснете <b>„Добави“</b> в лентата долу – и иконата е на телефона.</li></ol>
+    <div class="qr-box" id="qrBox"><span class="spin"></span></div><p class="hint" style="text-align:center;word-break:break-all">${esc(url)}</p>
+    <div class="btn-group"><button class="btn" data-act="copyLink">📋 Копирай връзката</button><button class="btn primary" data-act="closeModal">Готово</button></div>`;
+  $('modal').classList.remove('hidden'); window._appUrl=url;
+  try{ await loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js'); const q=qrcode(0,'M'); q.addData(url); q.make();
+    $('qrBox').innerHTML=q.createSvgTag({cellSize:6,margin:3,scalable:true}); }
+  catch(e){ $('qrBox').innerHTML='<p class="muted">Няма интернет за QR кода – изпратете си връзката отдолу.</p>'; } }
+ACTIONS.copyLink=()=>{ const u=window._appUrl||APP_URL; (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('✓ Връзката е копирана – изпратете си я по Viber/имейл'),()=>prompt('Копирайте връзката:',u)); };
+if(IS_PHONE) { const pb=$('phoneBtn'); if(pb) pb.classList.add('hidden'); }
+setTimeout(maybeShowInstallBar,1500);
 // ---- Приложение: работи и без интернет, инсталира се на телефона/компютъра ----
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)) window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); window._installEvt=e; const b=$('installBtn'); if(b) b.classList.remove('hidden'); });
-window.addEventListener('appinstalled',()=>{ const b=$('installBtn'); if(b) b.classList.add('hidden'); toast('✓ Програмата е инсталирана'); });
+window.addEventListener('appinstalled',()=>{ const b=$('installBtn'); if(b) b.classList.add('hidden'); $('installBar').classList.add('hidden'); toast('✓ Иконата е добавена – отваряйте програмата от нея'); });
 </script>
 </body>
 </html>
